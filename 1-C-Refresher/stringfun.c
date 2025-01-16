@@ -208,7 +208,6 @@ int find_word_start(char *buff, const char *old_word) {
 }
 
 void replace_word(char *buff, int len, int str_len, char *old_word, char *new_word) {
-    // Attempted but does not work
     char *str_ptr = buff;
     int word_start = find_word_start(buff, old_word);
     char *temp_ptr;
@@ -265,8 +264,13 @@ void replace_word(char *buff, int len, int str_len, char *old_word, char *new_wo
         exit(1);
     }
 
-    // Copy from buff to suffix_copy;
-    strcpy(suffix_copy, suffix_start);
+    // Copy from buff right side of word(aka suffix) to suffix_copy;
+    temp_ptr = suffix_start;
+    char* temp_copy = suffix_copy;
+    while(*temp_ptr) {
+        *temp_copy++ = *temp_ptr++;
+    }
+
 
     char *write_ptr = buff + word_start; // point to the start of the new word
     temp_ptr = new_word; // point to the new word start
