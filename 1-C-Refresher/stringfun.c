@@ -92,8 +92,8 @@ void print_buff(char *buff, int len, char operation, int status){
         }
         printf("]");
         putchar('\n');
-    } else if (operation == 'x') {
-        printf("Not Implemented");
+    } else if (status == 3 && operation == 'x') {
+            printf("Not Implemented!");
     } else {
         printf("Buffer:  [");
         for (int i=0; i<len; i++){
@@ -227,6 +227,8 @@ int find_word_start(char *buff, const char *old_word) {
 }
 
 int replace_word(char *buff, int len, int str_len, char *old_word, char *new_word) {
+    return 3;
+    
     char *str_ptr = buff;
     int word_start = find_word_start(buff, old_word);
     char *temp_ptr;
