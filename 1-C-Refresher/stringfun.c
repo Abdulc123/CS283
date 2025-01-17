@@ -8,7 +8,6 @@
 
 //prototypes
 void usage(char *);
-void print_buff(char *, int);
 int  setup_buff(char *, char *, int);
 int find_word_start(char *buff, const char *old_word);
 
@@ -16,11 +15,11 @@ int find_word_start(char *buff, const char *old_word);
 
 //prototypes for functions to handle required functionality
 int  count_words(char *, int, int);
-void print_buff(char *buff, int len);
+void print_buff(char *buff, int len, char, int status);
 int count_words(char *buff, int len, int str_len);
 void reverse_string(char *buff, int len, int str_len);
 void word_print(char *buff, int len, int str_len);
-void replace_word(char *buff, int len, int str_len, char *old_word, char *new_word);
+int replace_word(char *buff, int len, int str_len, char *old_word, char *new_word);
 
 
 int setup_buff(char *buff, char *user_str, int buffer_size){
@@ -28,23 +27,24 @@ int setup_buff(char *buff, char *user_str, int buffer_size){
     // (Internal buffer buff, user supplied string, and size of buff)
     
     char *buff_ptr = buff;
-    const char *str_ptr = user_str; // Create pointer for user_str
+    char *str_ptr = user_str; // Create pointer for user_str
     int len = 0;
-    int consecutive_spaces = 0;
+    char *last_non_space_char = NULL;
 
+    // Skip the leadings spaces
+    while (*str_ptr == ' ' || *str_ptr == '\t') {
+        str_ptr++;
+    }
 
     // 1. Check if user string exceeds the buffer size and copy over characters to buffer
 
     while (*str_ptr != '\0') {
         // Skipping the white space characters
         if (*str_ptr == ' ' || *str_ptr == '\t') {
-
             // If consecutive white spaces == 0, add the space to buffer
-            if (consecutive_spaces == 0) {
-                *buff_ptr = ' '; // Copy single space character over to buffer 
-                buff_ptr++;
+            if (buff_ptr > buff && *(buff_ptr - 1) != ' ') {
+                *buff_ptr++ = ' '; // Copy single space character over to buffer 
                 len++;  
-                consecutive_spaces = 1; // Set that a space has been found
             } 
 
         } else { 
@@ -52,37 +52,56 @@ int setup_buff(char *buff, char *user_str, int buffer_size){
             *buff_ptr = *str_ptr; // Copies over character from string to the buffer since
             buff_ptr++;
             len++;
-            consecutive_spaces = 0; // Reset the consecutive spaces, since we saw a non white space char
+            last_non_space_char = buff_ptr; // The last time a non space was seen was at buff_ptr
         }
 
         // If length is ever longer than the buffer size
-        if (len >= buffer_size) {
+        if (len > buffer_size) {
             return -1; // Provided User String is too long
         }
 
         str_ptr++; // Iterate to the next char in the user string
     }
 
+    len = last_non_space_char - buff;
+
     // The string length, before the ... are added
     int str_len = len;
+    //printf("Last non space character seen (%c) at index %d\n", *last_non_space_char, last_non_space_char - buff);
+   
     // Fill in the remaining spots in the buffer with dots
+    *last_non_space_char = '.';
     while (len < buffer_size) {
         *buff_ptr = '.';
         buff_ptr++;
         len++;
-    }
+    }   
+    // Null terminate the buffer
+    *buff_ptr = '\0';
 
     return str_len; // Return length of the string (not including the extra dots)
     
 }
 
 
-void print_buff(char *buff, int len){
-    printf("\nBuffer:  ");
-    for (int i=0; i<len; i++){
-        putchar(*(buff+i));
+void print_buff(char *buff, int len, char operation, int status){
+    if (operation == 'x' && status == -1) {
+        printf("Buffer:  [");
+        for (int i=0; i<len; i++){
+            putchar(*(buff+i));
+        }
+        printf("]");
+        putchar('\n');
+    } else if (operation == 'x') {
+        printf("Not Implemented");
+    } else {
+        printf("Buffer:  [");
+        for (int i=0; i<len; i++){
+            putchar(*(buff+i));
+        }
+        printf("]");
+        putchar('\n');
     }
-    putchar('\n');
 }
 
 void usage(char *exename){
@@ -161,7 +180,7 @@ void word_print(char *buff, int len, int str_len) {
             // We were previosly in a word
             if (current_char == ' ' || current_char == '.') {
                 // We have reached the end of the word, so print out its length, and change word_start
-                printf(" (%d)\n", word_length);
+                printf("(%d)\n", word_length);
                 word_start = false;
                 word_length = 0;
             } else {
@@ -171,7 +190,7 @@ void word_print(char *buff, int len, int str_len) {
             }
         }
     }
-    printf("\n");
+    printf("\nNumber of words returned: %d\n", word_count);
 }
 
 
@@ -207,18 +226,18 @@ int find_word_start(char *buff, const char *old_word) {
     return -1; // When old word is not found
 }
 
-void replace_word(char *buff, int len, int str_len, char *old_word, char *new_word) {
+int replace_word(char *buff, int len, int str_len, char *old_word, char *new_word) {
     char *str_ptr = buff;
     int word_start = find_word_start(buff, old_word);
     char *temp_ptr;
 
     // If finding the word was not succesfull, print out message and return nothing
     if (word_start == -1) {
-        printf("Word '%s' not found in the string\n", old_word);
-        return;
+        return -1;
+        exit(1);
     }
 
-    //printf("Word is found at Index: %d\n", word_start);
+    // printf("Word is found at Index: %d [%c]\n", word_start, *(str_ptr + word_start));
 
     // Get the lengths of the old and new word (without using strlen)
     int old_word_len = 0, new_word_len = 0;
@@ -243,10 +262,10 @@ void replace_word(char *buff, int len, int str_len, char *old_word, char *new_wo
         }
     }
 
-    //printf("Got the old and new word lengths, %d, %d\n", old_word_len, new_word_len);
+    // printf("Got the old and new word lengths, %d, %d\n", old_word_len, new_word_len);
 
     // Determine whether it is viable to swap them without creating an error, if size after replace is >= 50, raise an error
-    if (str_len - old_word_len + new_word_len >= len) {
+    if (str_len - old_word_len + new_word_len> len) {
         printf("Error: Buffer overflow would occur with replacement.\n");
         return;
     }
@@ -257,7 +276,7 @@ void replace_word(char *buff, int len, int str_len, char *old_word, char *new_wo
     char *suffix_start = buff + word_start + old_word_len;
 
     // Create a suffix copy so it can be added to the end of the buffer once new word is added in
-    char *suffix_copy = malloc(suffix_len + 1); //Allocates the memory
+    char *suffix_copy = malloc(suffix_len + 5); //Allocates the memory
 
     if (suffix_copy == NULL) {
         perror("Failed to allocate memory");
@@ -266,11 +285,10 @@ void replace_word(char *buff, int len, int str_len, char *old_word, char *new_wo
 
     // Copy from buff right side of word(aka suffix) to suffix_copy;
     temp_ptr = suffix_start;
-    char* temp_copy = suffix_copy;
-    while(*temp_ptr) {
+    char* temp_copy = suffix_copy; //temp_copy pointer is used to avoid using original suffix copy pointer
+    while(*temp_ptr) { 
         *temp_copy++ = *temp_ptr++;
     }
-
 
     char *write_ptr = buff + word_start; // point to the start of the new word
     temp_ptr = new_word; // point to the new word start
@@ -288,9 +306,12 @@ void replace_word(char *buff, int len, int str_len, char *old_word, char *new_wo
         j++;
     }
 
+    *write_ptr = '\0';
+
     free(suffix_copy);
 
-    printf("Modified Buffer: %s\n", buff);
+    // printf("Modified Buffer: %s\n", buff);
+    return 1;
 }
 
 int main(int argc, char *argv[]){
@@ -315,7 +336,6 @@ int main(int argc, char *argv[]){
     }
 
     opt = (char)*(argv[1]+1);   //get the option flag
-
     //handle the help flag and then exit normally
     if (opt == 'h'){
         usage(argv[0]);
@@ -353,14 +373,14 @@ int main(int argc, char *argv[]){
 
     user_str_len = setup_buff(buff, input_string, BUFFER_SZ);     //see todos
     if (user_str_len < 0){
-        printf("Error setting up buffer, error = %d\n", user_str_len);
+        printf("Error setting up buffer, size = %d\n", user_str_len);
         exit(2);
     } else if (user_str_len == -1) {
-        printf("Error: User String provided is too long");
+        printf("This is a string that does not work as it is too long");
     }
     
-    printf("The size of the string is %d\n", user_str_len);
-
+    // printf("The size of the string is %d\n", user_str_len);
+    int status = 0;
     switch (opt){
         case 'c':
             rc = count_words(buff, BUFFER_SZ, user_str_len);  //you need to implement
@@ -377,15 +397,6 @@ int main(int argc, char *argv[]){
         case 'r':
             // Reverses the string
             reverse_string(buff, BUFFER_SZ, user_str_len);
-            
-            char *reverse_str_ptr = buff;
-            printf("Reversed String: ");
-            // Print out the reversed string letter by letter
-            for (int i = 0; i < user_str_len; i++) {
-    
-                printf("%c", *(reverse_str_ptr + i));
-            }
-            printf("\n");
             break;
 
         case 'w':
@@ -408,8 +419,6 @@ int main(int argc, char *argv[]){
                 exit(1);
             }
 
-
-
             char *old_word = argv[3];
             char *new_word = argv[4];
 
@@ -420,7 +429,9 @@ int main(int argc, char *argv[]){
                 exit(1);
             }
 
-            replace_word(buff, BUFFER_SZ, user_str_len, old_word, new_word);
+            
+            status = replace_word(buff, BUFFER_SZ, user_str_len, old_word, new_word);
+
             break;
 
         default:
@@ -429,7 +440,7 @@ int main(int argc, char *argv[]){
     }
 
     //TODO:  #6 Dont forget to free your buffer before exiting
-    print_buff(buff,BUFFER_SZ);
+    print_buff(buff,BUFFER_SZ, opt, status);
     free(buff);
     exit(0);
 }
