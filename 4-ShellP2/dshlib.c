@@ -242,11 +242,17 @@ int exec_local_cmd_loop()
         // Include something for cd as well...
         // Check if the command is a built-in command
         if (strcmp(cmd.argv[0], "cd") == 0) {
-            // If no directory is provided, do nothing
             if (cmd.argc < 2) {
-                // Optionally print a message indicating no directory was provided
                 continue;
             }
+
+            // If too many arguments provided
+            if (cmd.argc > 2) {
+                printf("Error: cd, too many arguments provided\n");
+                return(ERR_CMD_OR_ARGS_TOO_BIG);
+            }
+
+
             // Change directory to the provided argument
             if (chdir(cmd.argv[1]) != 0) {
                 perror("cd failed");

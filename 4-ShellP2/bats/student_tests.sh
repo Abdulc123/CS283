@@ -42,7 +42,7 @@ EOF
 }
 
 
-# Test 4: Built-in cd with an invalid directory should print an error
+# Test 3: Built-in cd with an invalid directory should print an error
 @test "Invalid cd command prints error" {
   run ./dsh <<EOF
 cd /nonexistent_directory
@@ -51,6 +51,18 @@ exit
 EOF
   # Expect the error message from cd (for example, "cd failed" or similar message using perror)
   [[ "$output" =~ "cd failed" ]]
+  [ "$status" -eq 0 ]
+}
+
+# Test 4: Too many commands given for cd
+@test "Too many commands given for cd" {
+  run ./dsh <<EOF
+cd bats test
+pwd
+exit
+EOF
+  # Expect the error message from cd (for example, "cd failed" or similar message using perror)
+  [[ "$output" =~ "Error: cd, too many arguments provided" ]]
   [ "$status" -eq 0 ]
 }
 
