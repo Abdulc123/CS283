@@ -70,53 +70,93 @@ char *trim(char *str) {
 
     memset(clist, 0, sizeof(command_list_t));
 
-    char *token = strtok(cmd_line, PIPE_STRING);
+    char *str_p = cmd_line;  // Pointer to traverse the command line
     int cmd_count = 0;
 
-    while (token != NULL) {
+    while (*str_p != '\0') {
+        // Skip leading spaces
+        while (*str_p != '\0' && isspace((unsigned char)*str_p)) {
+            str_p++;
+        }
+
+        if (*str_p == '\0') break;  // End of input
+
+        command_t *cmd = &clist->commands[cmd_count];
+        cmd->argc = 0;
+
+        while (*str_p != '\0') {
+            char *token_start;
+            int token_len = 0;
+            char *token;
+
+            // Handle quoted strings
+            if (*str_p == '"') {
+                str_p++;  // Skip opening quote
+                token_start = str_p;
+
+                // Move until the closing quote
+                while (*str_p != '\0' && *str_p != '"') {
+                    str_p++;
+                    token_len++;
+                }
+
+                // Allocate and copy token
+                token = (char *)malloc(token_len + 1);
+                if (token == NULL) return ERR_MEMORY;
+                strncpy(token, token_start, token_len);
+                token[token_len] = '\0';
+
+                // Skip closing quote
+                if (*str_p == '"') {
+                    str_p++;
+                }
+            } else {  // Handle unquoted strings
+                token_start = str_p;
+                while (*str_p != '\0' && !isspace((unsigned char)*str_p)) {
+                    str_p++;
+                    token_len++;
+                }
+
+                // Allocate and copy token
+                token = (char *)malloc(token_len + 1);
+                if (token == NULL) return ERR_MEMORY;
+                strncpy(token, token_start, token_len);
+                token[token_len] = '\0';
+            }
+
+            // Store the argument in argv
+            if (cmd->argc < N_ARG_MAX) {
+                cmd->argv[cmd->argc] = token;
+                cmd->argc++;
+            } else {
+                free(token);
+                return ERR_TOO_MANY_COMMANDS;
+            }
+
+            // Skip trailing spaces
+            while (*str_p != '\0' && isspace((unsigned char)*str_p)) {
+                str_p++;
+            }
+
+            // If we find a pipe '|', move to the next command
+            if (*str_p == '|') {
+                str_p++;  // Skip pipe
+                break;
+            }
+        }
+
+        cmd->argv[cmd->argc] = NULL;  // Required for execvp()
+
+        // Extract executable name
+        if (cmd->argc > 0) {
+            strncpy(cmd->exe, cmd->argv[0], EXE_MAX - 1);
+            cmd->exe[EXE_MAX - 1] = '\0';
+        }
+
+        cmd_count++;
         if (cmd_count >= CMD_MAX) {
             return ERR_TOO_MANY_COMMANDS;
         }
-
-        char *command = trim(token);
-        if (strlen(command) == 0) {
-            token = strtok(NULL, PIPE_STRING);
-            continue;
-        }
-
-        command_t *cmd = &clist->commands[cmd_count];
-
-        // Copy command into buffer for safe tokenization
-        char token_copy[SH_CMD_MAX];
-        strncpy(token_copy, command, SH_CMD_MAX - 1);
-        token_copy[SH_CMD_MAX - 1] = '\0';
-
-        char *saveptr;
-        char *arg_token = strtok_r(token_copy, " ", &saveptr);
-        if (!arg_token) {
-            token = strtok(NULL, PIPE_STRING);
-            continue;
-        }
-
-        // Set executable name
-        if (strlen(arg_token) >= EXE_MAX) {
-            return ERR_CMD_OR_ARGS_TOO_BIG;
-        }
-        strcpy(cmd->exe, arg_token);
-
-        // Parse arguments into argv array
-        cmd->argc = 0;
-        while ((arg_token = strtok_r(NULL, " ", &saveptr)) != NULL) {
-            if (cmd->argc >= N_ARG_MAX) {
-                return ERR_CMD_OR_ARGS_TOO_BIG;
-            }
-            cmd->argv[cmd->argc] = strdup(arg_token);  // Allocate memory and copy argument
-            cmd->argc++;
-        }
-
-        cmd->argv[cmd->argc] = NULL;  // Required by execvp()
-        cmd_count++;
-        token = strtok(NULL, PIPE_STRING);
     }
 
     clist->num = cmd_count;
@@ -139,9 +179,9 @@ int exec_local_cmd_loop() {
         }
 
         cmd_buffer[strcspn(cmd_buffer, "\n")] = '\0'; // Remove newline
-        
-        if (strlen(cmd_buffer) == 0) {
-            printf(CMD_WARN_NO_CMD);
+             
+        if (strlen(cmd_buffer) == 0) { // no input given
+            printf(CMD_WARN_NO_CMD); 
             continue;
         }
 
@@ -149,9 +189,37 @@ int exec_local_cmd_loop() {
         if (result != OK) {
             if (result == ERR_TOO_MANY_COMMANDS) {
                 printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
+                return ERR_TOO_MANY_COMMANDS;
             } else {
                 fprintf(stderr, "Error parsing command.\n");
+                return ERR_TOO_MANY_COMMANDS;
             }
+            continue;
+        }
+
+        if (strcmp(clist.commands->argv[0], EXIT_CMD) == 0) {
+            printf("exiting...\n");
+            break;
+        }
+
+        // Check if the command is a built-in command
+        if (strcmp(clist.commands->argv[0], "cd") == 0) {
+            if (clist.commands->argc < 2) {
+                continue;
+            }
+
+            // If too many arguments provided
+            if (clist.commands->argc > 2) {
+                printf("Error: cd, too many arguments provided\n");
+                return(ERR_CMD_OR_ARGS_TOO_BIG);
+            }
+
+
+            // Change directory to the provided argument
+            if (chdir(clist.commands->argv[1]) != 0) {
+                perror("cd failed");
+            }
+            // Skip further processing for this command
             continue;
         }
         
@@ -171,7 +239,7 @@ int exec_local_cmd_loop() {
         for (int i = 0; i < num_cmds; i++) {
             pids[i] = fork();
             if (pids[i] < 0) {
-                perror("fork");
+                perror("fork Failed");
                 return ERR_EXEC_CMD;
             }
             
@@ -191,21 +259,27 @@ int exec_local_cmd_loop() {
                 
                 // Execute command
                 command_t *cmd = &clist.commands[i];
-                execlp(cmd->exe, cmd->exe, cmd->args, NULL);
-                perror("exec");
+                execvp(cmd->exe, cmd->argv);
+                perror("exec Failed");
                 exit(EXIT_FAILURE);
             }
         }
         
-        // Close pipes in parent process
+        // Close all pipes in parent process
         for (int i = 0; i < num_cmds - 1; i++) {
-            close(pipes[i][0]);
-            close(pipes[i][1]);
+            close(pipes[i][0]); // Close read end
+            close(pipes[i][1]); // Close write end
         }
         
         // Wait for all child processes
         for (int i = 0; i < num_cmds; i++) {
             waitpid(pids[i], NULL, 0);
+        }
+
+        for (int i = 0; i < clist.num; i++) { 
+            for (int j = 0; j < clist.commands[i].argc; j++) {
+                free(clist.commands[i].argv[j]); // Free each argument
+            }
         }
     }
     return OK;
