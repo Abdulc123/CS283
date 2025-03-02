@@ -222,6 +222,12 @@ int exec_local_cmd_loop() {
             // Skip further processing for this command
             continue;
         }
+
+        // Check if command is dragon 
+        if (strcmp(clist.commands->argv[0], "dragon") == 0) {
+            print_dragon();
+            continue;
+        }
         
         int num_cmds = clist.num;
         int pipes[num_cmds - 1][2];

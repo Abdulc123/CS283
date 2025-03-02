@@ -10,6 +10,20 @@
 // Longest command that can be read from the shell
 #define SH_CMD_MAX EXE_MAX + ARG_MAX
 
+// Compressed Dragon Parameters
+#define DRAGON_ROWS 38
+#define DRAGON_COLS 17
+
+// Structure for storing compressed dragon data
+typedef struct {
+    unsigned char count; // How many times the character repeats
+    unsigned char value; // ASCII character value
+} DragonCompressed;
+
+extern DragonCompressed dragon_data[DRAGON_ROWS][DRAGON_COLS];
+
+
+
 // typedef struct command
 // {
 //     char exe[EXE_MAX];
