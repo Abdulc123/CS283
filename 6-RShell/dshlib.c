@@ -9,19 +9,6 @@
 
 #include "dshlib.h"
 
-
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/wait.h>
-
-#include "dshlib.h"
-
 /**** 
  **** FOR REMOTE SHELL USE YOUR SOLUTION FROM SHELL PART 3 HERE
  **** THE MAIN FUNCTION CALLS THIS ONE AS ITS ENTRY POINT TO
@@ -72,10 +59,217 @@
  *  Standard Library Functions You Might Want To Consider Using (assignment 2+)
  *      fork(), execvp(), exit(), chdir()
  */
-int exec_local_cmd_loop()
-{
+int exec_local_cmd_loop() {
+    char cmd_buffer[SH_CMD_MAX];
+    command_list_t clist;
+    
+    while (1) {
+        printf("%s", SH_PROMPT);
+        if (fgets(cmd_buffer, SH_CMD_MAX, stdin) == NULL) {
+            printf("\n");
+            break;
+        }
 
-    // THIS CODE SHOULD BE THE SAME AS PRIOR ASSIGNMENTS
-   
+        cmd_buffer[strcspn(cmd_buffer, "\n")] = '\0'; // Remove newline
+             
+        if (strlen(cmd_buffer) == 0) { // no input given
+            printf(CMD_WARN_NO_CMD); 
+            continue;
+        }
+
+        int result = build_cmd_list(cmd_buffer, &clist);
+        if (result != OK) {
+            if (result == ERR_TOO_MANY_COMMANDS) {
+                printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
+                return ERR_TOO_MANY_COMMANDS;
+            } else {
+                fprintf(stderr, "Error parsing command.\n");
+                return ERR_TOO_MANY_COMMANDS;
+            }
+            continue;
+        }
+
+        if (strcmp(clist.commands[0].argv[0], EXIT_CMD) == 0) {
+            printf("exiting...\n");
+            break;
+        }
+
+        // Check if the command is a built-in command
+        if (strcmp(clist.commands[0].argv[0], "cd") == 0) {
+            if (clist.commands[0].argc < 2) {
+                continue;
+            }
+
+            // If too many arguments provided
+            if (clist.commands[0].argc > 2) {
+                printf("Error: cd, too many arguments provided\n");
+                return(ERR_CMD_OR_ARGS_TOO_BIG);
+            }
+
+            // Change directory to the provided argument
+            if (chdir(clist.commands[0].argv[1]) != 0) {
+                perror("cd failed");
+            }
+            // Skip further processing for this command
+            continue;
+        }
+        
+        int num_cmds = clist.num;
+        int pipes[num_cmds - 1][2];
+        pid_t pids[num_cmds];
+
+        // Create pipes
+        for (int i = 0; i < num_cmds - 1; i++) {
+            if (pipe(pipes[i]) == -1) {
+                perror("pipe");
+                return ERR_EXEC_CMD;
+            }
+        }
+
+        // Fork and execute each command
+        for (int i = 0; i < num_cmds; i++) {
+            pids[i] = fork();
+            if (pids[i] < 0) {
+                perror("fork Failed");
+                return ERR_EXEC_CMD;
+            }
+            
+            if (pids[i] == 0) { // Child process
+                // Set up pipes for input/output
+                if (i > 0) { // If not first command, read from previous pipe
+                    dup2(pipes[i - 1][0], STDIN_FILENO);
+                }
+                if (i < num_cmds - 1) { // If not last command, write to next pipe
+                    dup2(pipes[i][1], STDOUT_FILENO);
+                }
+                
+                // Close all pipes in child process
+                for (int j = 0; j < num_cmds - 1; j++) {
+                    close(pipes[j][0]);
+                    close(pipes[j][1]);
+                }
+                
+                // Execute command
+                execvp(clist.commands[i].argv[0], clist.commands[i].argv);
+                perror("exec Failed");
+                exit(EXIT_FAILURE);
+            }
+        }
+        
+        // Close all pipes in parent process
+        for (int i = 0; i < num_cmds - 1; i++) {
+            close(pipes[i][0]);
+            close(pipes[i][1]);
+        }
+        
+        // Wait for all child processes
+        for (int i = 0; i < num_cmds; i++) {
+            waitpid(pids[i], NULL, 0);
+        }
+    }
     return OK;
+}
+
+char *trim(char *str) {
+    while (isspace((unsigned char)*str)) str++;  // Trim leading spaces
+    if (*str == '\0') return str;  // Return immediately if empty
+
+    char *end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) *end-- = '\0';  // Trim trailing spaces
+
+    return str;
+}
+
+int build_cmd_list(char *cmd_line, command_list_t *clist) {
+    if (!cmd_line || !clist) {
+        return WARN_NO_CMDS;
+    }
+
+    memset(clist, 0, sizeof(command_list_t));
+
+    char *str_p = cmd_line;  // Pointer to traverse the command line
+    int cmd_count = 0;
+
+    while (*str_p != '\0') {
+        // Skip leading spaces
+        while (*str_p != '\0' && isspace((unsigned char)*str_p)) {
+            str_p++;
+        }
+
+        if (*str_p == '\0') break;  // End of input
+
+        cmd_buff_t *cmd = &clist->commands[cmd_count];
+        cmd->argc = 0;
+
+        while (*str_p != '\0') {
+            char *token_start;
+            int token_len = 0;
+            char *token;
+
+            // Handle quoted strings
+            if (*str_p == '"') {
+                str_p++;  // Skip opening quote
+                token_start = str_p;
+
+                // Move until the closing quote
+                while (*str_p != '\0' && *str_p != '"') {
+                    str_p++;
+                    token_len++;
+                }
+
+                // Allocate and copy token
+                token = (char *)malloc(token_len + 1);
+                if (token == NULL) return ERR_MEMORY;
+                strncpy(token, token_start, token_len);
+                token[token_len] = '\0';
+
+                // Skip closing quote
+                if (*str_p == '"') {
+                    str_p++;
+                }
+            } else {  // Handle unquoted strings
+                token_start = str_p;
+                while (*str_p != '\0' && !isspace((unsigned char)*str_p) && *str_p != '|') {
+                    str_p++;
+                    token_len++;
+                }
+
+                // Allocate and copy token
+                token = (char *)malloc(token_len + 1);
+                if (token == NULL) return ERR_MEMORY;
+                strncpy(token, token_start, token_len);
+                token[token_len] = '\0';
+            }
+
+            // Store the argument in argv
+            if (cmd->argc < CMD_ARGV_MAX) {
+                cmd->argv[cmd->argc] = token;
+                cmd->argc++;
+            } else {
+                free(token);
+                return ERR_TOO_MANY_COMMANDS;
+            }
+
+            // Skip trailing spaces
+            while (*str_p != '\0' && isspace((unsigned char)*str_p)) {
+                str_p++;
+            }
+
+            // If we find a pipe '|', move to the next command
+            if (*str_p == '|') {
+                str_p++;  // Skip pipe
+                break;
+            }
+        }
+
+        cmd->argv[cmd->argc] = NULL;  // Required for execvp()
+
+        cmd_count++;
+        if (cmd_count >= CMD_MAX) {
+            return ERR_TOO_MANY_COMMANDS;
+        }
+    }
+
+    clist->num = cmd_count;
+    return (cmd_count == 0) ? WARN_NO_CMDS : OK;
 }

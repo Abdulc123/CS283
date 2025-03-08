@@ -21,6 +21,11 @@
                                             //server.  See documentation for 
                                             //exec_client_requests() for more info
 
+// Socket related constants
+#define RDSH_BACKLOG           20          // Maximum length of pending connections queue
+#define ERR_RDSH_SOCKET       -54          // Socket creation/operation error
+#define OK_STOP_SERVER        -55          // Server stop requested by client
+
 //end of message delimiter.  This is super important.  TCP is a stream, therefore
 //the protocol designer is responsible for managing where messages begin and end
 //there are many common techniques for this, but one of the simplest ways is to
