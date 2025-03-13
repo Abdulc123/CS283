@@ -582,7 +582,7 @@
          return BI_CMD_DRAGON;
      if (strcmp(input, "cd") == 0)
          return BI_CMD_CD;
-     if (strcmp(input, "stop-server") == 0)
+     if (strcmp(input, "stop-ser    ver") == 0)
          return BI_CMD_STOP_SVR;
      if (strcmp(input, "rc") == 0)
          return BI_CMD_RC;
